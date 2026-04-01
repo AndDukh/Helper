@@ -6,6 +6,7 @@ services:
     environment:
       REDIS_URL: redis://redis:6379/0
       DATABASE_URL: postgresql+psycopg://helper:helper@postgres:5432/helper
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
     ports:
       - "8000:8000"
     depends_on:
@@ -28,11 +29,21 @@ services:
     container_name: helper-frontend
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      API_PROXY_TARGET: http://backend:8000
     ports:
       - "3000:3000"
     depends_on:
       - backend
+
+  telegram-bot:
+    build: ./telegram-bot
+    container_name: helper-telegram-bot
+    restart: unless-stopped
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      WEBAPP_URL: ${WEBAPP_URL:-}
+    depends_on:
+      - frontend
 
   postgres:
     image: postgres:16

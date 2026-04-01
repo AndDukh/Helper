@@ -7,16 +7,59 @@ Helper is a Telegram Mini App + Bot for meeting capture, protocol generation, ta
 - `frontend/` - Telegram Mini App (UI).
 - `backend/` - API service (meetings, protocols, tasks, auth).
 - `worker/` - background jobs (STT, protocol generation, reminders, AI execution).
+- `telegram-bot/` - long-polling bot that opens the Mini App via WebApp button.
 - `infra/` - infra configs and local ops notes.
 - `docs/` - PRD and implementation planning docs.
+
+## Telegram Mini App: вывести в Telegram и тест на компьютере
+
+Mini App в Telegram открывается **только по HTTPS** (обычный `http://localhost` из Telegram недоступен). В этом репозитории фронтенд ходит в API через **`/api/*`** (rewrite в Next.js на backend), поэтому для теста в Telegram достаточно **одного HTTPS-адреса на порт 3000**.
+
+### 1) Переменные в `.env`
+
+- `TELEGRAM_BOT_TOKEN` — токен от [@BotFather](https://t.me/BotFather).
+- `WEBAPP_URL` — публичный **HTTPS** URL вашего Next.js (без слэша в конце или со слэшем — бот сам нормализует). Пример: `https://abcd-12.ngrok-free.app`.
+
+**Важно:** не коммитьте реальные токены. Если токен когда-либо попал в git или в чат — отзовите его в BotFather и выдайте новый.
+
+### 2) Туннель на локальный фронт (пример: ngrok)
+
+Установите [ngrok](https://ngrok.com/) (или аналог: Cloudflare Tunnel, localtunnel).
+
+```bash
+docker compose up -d
+ngrok http 3000
+```
+
+Скопируйте выданный **https** URL в `WEBAPP_URL` в `.env`, затем:
+
+```bash
+docker compose up -d --force-recreate telegram-bot backend frontend
+```
+
+### 3) Проверка в Telegram
+
+1. Найдите своего бота в Telegram.
+2. Отправьте `/start`.
+3. Нажмите кнопку **Open Helper** — откроется Mini App.
+4. Нажмите **Verify Telegram session** — запрос уйдёт на `POST /telegram/verify-init` (через `/api/...` на фронте).
+
+Опционально в BotFather: **Bot Settings → Menu Button** — укажите тот же URL, что и `WEBAPP_URL`, чтобы кнопка меню всегда открывала приложение.
+
+### 4) Тест на компьютере без Telegram
+
+- UI и API через один origin: откройте `http://localhost:3000` — запросы идут на `/api/...` и проксируются на backend (`API_PROXY_TARGET` в Docker: `http://backend:8000`, локально без Docker: `http://127.0.0.1:8000`).
+- Проверка `initData` сработает **только** при открытии страницы из Telegram (кнопка Mini App).
+- Прямой смоук API: `curl http://localhost:8000/health` и эндпоинты из списка ниже.
 
 ## Local Development (initial)
 
 1. Copy env template:
    - `cp .env.example .env`
-2. Start infrastructure:
+2. Заполните `.env` (`TELEGRAM_BOT_TOKEN`, для Telegram — ещё `WEBAPP_URL` после ngrok).
+3. Start infrastructure:
    - `docker compose up -d`
-3. Verify services:
+4. Verify services:
    - Postgres: `localhost:5432`
    - Redis: `localhost:6379`
    - MinIO API: `localhost:9000`
@@ -35,6 +78,7 @@ Helper is a Telegram Mini App + Bot for meeting capture, protocol generation, ta
 - `POST /meetings/{id}/protocol-draft` (stub draft)
 - `POST /meetings/{id}/start-demo-flow` (stub chain: transcript + protocol in one call)
 - `POST /assistant/execute` (ClawBot integration point + local stub fallback)
+- `POST /telegram/verify-init` (проверка `initData` Mini App; с фронта: `POST /api/telegram/verify-init`)
 
 Meeting state, transcript, and protocol draft are now persisted in PostgreSQL.
 
@@ -42,14 +86,14 @@ Meeting state, transcript, and protocol draft are now persisted in PostgreSQL.
 
 - Confirm Docker is available: `docker --version` and `docker compose version`.
 - Start stack: `docker compose up -d` (from repo root).
-- Check containers: `docker compose ps` and `docker logs helper-backend --tail 50`.
+- Check containers: `docker compose ps` and `docker logs helper-backend --tail 50` / `docker logs helper-telegram-bot --tail 50`.
 - API smoke test:
   - `curl -sS http://localhost:8000/health`
   - `curl -sS -X POST http://localhost:8000/meetings/start -H 'Content-Type: application/json' -d '{"title":"Smoke test"}'`
 
 ## Next steps toward a working end-user prototype
 
-- Telegram Bot + Mini App: create bot in BotFather, host Mini App over HTTPS, validate `initData` on the backend.
+- Telegram Bot + Mini App: базовый polling-бот, HTTPS через туннель, проверка `initData` — уже в репо; дальше — webhook на проде и жёсткая привязка сессий к `user.id`.
 - Secrets: set `TELEGRAM_BOT_TOKEN`, `OPENAI_API_KEY` (Whisper API), optional `CLAWBOT_API_URL` / `CLAWBOT_API_KEY` in `.env` and pass into `docker compose`.
 - Real audio path: record/upload to object storage (MinIO/S3), store `audio_asset` metadata, run STT as a background job (Celery) with status polling.
 - Protocol generation: replace stub with LLM call using stored transcript; add JSON schema validation and versioning on `protocols`.
