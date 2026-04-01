@@ -25,6 +25,8 @@ Helper is a Telegram Mini App + Bot for meeting capture, protocol generation, ta
 ## Prototype API Endpoints
 
 - `GET /health`
+- `GET /meetings`
+- `GET /meetings/{id}`
 - `POST /meetings/start`
 - `POST /meetings/stop`
 - `POST /meetings/{id}/transcribe` (multipart with `audio` file; Whisper API if `OPENAI_API_KEY` is set)

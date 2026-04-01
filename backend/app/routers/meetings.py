@@ -20,6 +20,16 @@ router = APIRouter()
 stt_service = STTService()
 
 
+def _to_meeting_response(meeting: Meeting) -> MeetingResponse:
+    return MeetingResponse(
+        id=meeting.id,
+        title=meeting.title,
+        status=meeting.status,
+        started_at=meeting.started_at,
+        stopped_at=meeting.stopped_at,
+    )
+
+
 def _build_protocol_stub(meeting_id: UUID, title: str) -> ProtocolDraftResponse:
     return ProtocolDraftResponse(
         meeting_id=meeting_id,
@@ -35,6 +45,20 @@ def _build_protocol_stub(meeting_id: UUID, title: str) -> ProtocolDraftResponse:
     )
 
 
+@router.get("", response_model=list[MeetingResponse])
+def list_meetings(db: Session = Depends(get_db)) -> list[MeetingResponse]:
+    meetings = db.query(Meeting).order_by(Meeting.started_at.desc()).all()
+    return [_to_meeting_response(meeting) for meeting in meetings]
+
+
+@router.get("/{meeting_id}", response_model=MeetingResponse)
+def get_meeting(meeting_id: UUID, db: Session = Depends(get_db)) -> MeetingResponse:
+    meeting = db.get(Meeting, meeting_id)
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    return _to_meeting_response(meeting)
+
+
 @router.post("/start", response_model=MeetingResponse)
 def start_meeting(payload: MeetingStartRequest, db: Session = Depends(get_db)) -> MeetingResponse:
     meeting = Meeting(
@@ -45,13 +69,7 @@ def start_meeting(payload: MeetingStartRequest, db: Session = Depends(get_db)) -
     db.add(meeting)
     db.commit()
     db.refresh(meeting)
-    return MeetingResponse(
-        id=meeting.id,
-        title=meeting.title,
-        status=meeting.status,
-        started_at=meeting.started_at,
-        stopped_at=meeting.stopped_at,
-    )
+    return _to_meeting_response(meeting)
 
 
 @router.post("/stop", response_model=MeetingResponse)
@@ -60,26 +78,14 @@ def stop_meeting(payload: MeetingStopRequest, db: Session = Depends(get_db)) -> 
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
     if meeting.status == "stopped":
-        return MeetingResponse(
-            id=meeting.id,
-            title=meeting.title,
-            status=meeting.status,
-            started_at=meeting.started_at,
-            stopped_at=meeting.stopped_at,
-        )
+        return _to_meeting_response(meeting)
 
     meeting.status = "stopped"
     meeting.stopped_at = datetime.now(tz=timezone.utc)
     db.add(meeting)
     db.commit()
     db.refresh(meeting)
-    return MeetingResponse(
-        id=meeting.id,
-        title=meeting.title,
-        status=meeting.status,
-        started_at=meeting.started_at,
-        stopped_at=meeting.stopped_at,
-    )
+    return _to_meeting_response(meeting)
 
 
 @router.post("/{meeting_id}/protocol-draft", response_model=ProtocolDraftResponse)
@@ -169,11 +175,5 @@ def start_demo_flow(meeting_id: UUID, db: Session = Depends(get_db)) -> DemoFlow
         db.add(protocol_row)
     db.commit()
 
-    meeting_response = MeetingResponse(
-        id=meeting.id,
-        title=meeting.title,
-        status=meeting.status,
-        started_at=meeting.started_at,
-        stopped_at=meeting.stopped_at,
-    )
+    meeting_response = _to_meeting_response(meeting)
     return DemoFlowResponse(meeting=meeting_response, transcript=transcript, protocol=protocol)
