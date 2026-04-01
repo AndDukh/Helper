@@ -22,6 +22,15 @@ Helper is a Telegram Mini App + Bot for meeting capture, protocol generation, ta
    - MinIO API: `localhost:9000`
    - MinIO Console: `localhost:9001`
 
+## Prototype API Endpoints
+
+- `GET /health`
+- `POST /meetings/start`
+- `POST /meetings/stop`
+- `POST /meetings/{id}/transcribe` (multipart with `audio` file; Whisper API if `OPENAI_API_KEY` is set)
+- `POST /meetings/{id}/protocol-draft` (stub draft)
+- `POST /assistant/execute` (ClawBot integration point + local stub fallback)
+
 ## Next
 
 Detailed execution plan and sprint backlog are in:

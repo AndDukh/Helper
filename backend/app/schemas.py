@@ -26,3 +26,20 @@ class ProtocolDraftResponse(BaseModel):
     summary: str
     decisions: list[str]
     action_items: list[dict[str, str]]
+
+
+class TranscriptResponse(BaseModel):
+    meeting_id: UUID
+    transcript_text: str
+
+
+class AssistantExecuteRequest(BaseModel):
+    task: str = Field(min_length=3, max_length=1000)
+    context: str | None = None
+
+
+class AssistantExecuteResponse(BaseModel):
+    provider: str
+    status: str
+    summary: str
+    artifact: str

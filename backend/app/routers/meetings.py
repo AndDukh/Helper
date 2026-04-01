@@ -1,17 +1,20 @@
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from ..schemas import (
     MeetingResponse,
     MeetingStartRequest,
     MeetingStopRequest,
     ProtocolDraftResponse,
+    TranscriptResponse,
 )
+from ..services.stt_service import STTService
 
 router = APIRouter()
 MEETINGS: dict[UUID, MeetingResponse] = {}
+stt_service = STTService()
 
 
 @router.post("/start", response_model=MeetingResponse)
@@ -57,3 +60,21 @@ def generate_protocol_stub(meeting_id: UUID) -> ProtocolDraftResponse:
             {"owner": "team", "task": "Prepare demo flow", "due_date": "2026-04-08"},
         ],
     )
+
+
+@router.post("/{meeting_id}/transcribe", response_model=TranscriptResponse)
+async def transcribe_meeting_audio(meeting_id: UUID, audio: UploadFile = File(...)) -> TranscriptResponse:
+    meeting = MEETINGS.get(meeting_id)
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    content = await audio.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Audio file is empty")
+
+    transcript = await stt_service.transcribe(
+        filename=audio.filename or "meeting_audio.webm",
+        content=content,
+        content_type=audio.content_type,
+    )
+    return TranscriptResponse(meeting_id=meeting_id, transcript_text=transcript)
