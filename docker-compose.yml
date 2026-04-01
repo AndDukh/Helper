@@ -1,6 +1,38 @@
 version: "3.9"
 
 services:
+  backend:
+    build: ./backend
+    container_name: helper-backend
+    restart: unless-stopped
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+      - postgres
+
+  worker:
+    build: ./worker
+    container_name: helper-worker
+    restart: unless-stopped
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - redis
+
+  frontend:
+    build: ./frontend
+    container_name: helper-frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://backend:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
   postgres:
     image: postgres:16
     container_name: helper-postgres
