@@ -1,3 +1,6 @@
+import os
+
+import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -28,3 +31,23 @@ def on_startup() -> None:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/health/stt")
+async def health_stt() -> dict:
+    """Check connectivity to configured speech-to-text backend (Hipc whisper-api in Docker)."""
+    provider = os.getenv("STT_PROVIDER", "openai_whisper_api")
+    if provider != "hipc_whisper_api":
+        return {
+            "provider": provider,
+            "hipc_whisper_api": None,
+            "note": "Set STT_PROVIDER=hipc_whisper_api to use local whisper-api container.",
+        }
+    base = os.getenv("WHISPER_API_BASE_URL", "http://whisper-api:8100").rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            response = await client.get(f"{base}/tasks")
+            response.raise_for_status()
+        return {"provider": provider, "base": base, "reachable": True}
+    except Exception as exc:
+        return {"provider": provider, "base": base, "reachable": False, "error": str(exc)}

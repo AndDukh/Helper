@@ -63,6 +63,7 @@ Mini App в Telegram открывается **только по HTTPS** (обы�
 |--------|-----|
 | Mini App (UI) | [http://localhost:3000](http://localhost:3000) или [http://127.0.0.1:3000](http://127.0.0.1:3000) |
 | Backend API | [http://localhost:8000/health](http://localhost:8000/health) |
+| Проверка Whisper (backend → whisper-api) | [http://localhost:8000/health/stt](http://localhost:8000/health/stt) |
 | Whisper API | [http://localhost:8100](http://localhost:8100) |
 | MinIO (S3) | [http://localhost:9000](http://localhost:9000) |
 | MinIO Console | [http://localhost:9001](http://localhost:9001) |
@@ -109,6 +110,7 @@ curl -sS http://localhost:8100/task/00000000-0000-0000-0000-000000000000
 ## Prototype API Endpoints
 
 - `GET /health`
+- `GET /health/stt` (доступен ли Hipc whisper-api для `STT_PROVIDER=hipc_whisper_api`; с фронта: `/api/health/stt`)
 - `GET /meetings`
 - `GET /meetings/{id}`
 - `GET /meetings/{id}/transcript`

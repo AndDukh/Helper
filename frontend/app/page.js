@@ -275,6 +275,21 @@ export default function HomePage() {
     }
   }
 
+  async function checkSttHealth() {
+    setLoading(true);
+    setOutput(null);
+    try {
+      const response = await fetch(`${apiBase}/health/stt`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Проверка не удалась");
+      setOutput(data);
+    } catch (error) {
+      setOutput({ error: error.message });
+    } finally {
+      setLoading(false);
+    }
+  }
+
   const outputIsError = output && typeof output.error === "string";
 
   return (
@@ -339,6 +354,11 @@ export default function HomePage() {
         <p className="card__desc">
           Запись через микрофон браузера. После «Стоп» — «Расшифровать»: на сервере используется локальный Whisper (Docker whisper-api) или OpenAI — см. README / STT_PROVIDER.
         </p>
+        <div className="btn-row" style={{ marginBottom: 12 }}>
+          <button type="button" className="btn btn--ghost" onClick={checkSttHealth} disabled={loading}>
+            Проверить Whisper (связь с API)
+          </button>
+        </div>
         {recError ? <p className="card__desc" style={{ color: "var(--danger)" }}>{recError}</p> : null}
         <div className="dictaphone-timer">{formatTime(elapsed)}</div>
         <p className="dictaphone-hint">

@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
+import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
@@ -155,11 +156,21 @@ async def transcribe_meeting_audio(
     if not content:
         raise HTTPException(status_code=400, detail="Audio file is empty")
 
-    transcript = await stt_service.transcribe(
-        filename=audio.filename or "meeting_audio.webm",
-        content=content,
-        content_type=audio.content_type,
-    )
+    try:
+        transcript = await stt_service.transcribe(
+            filename=audio.filename or "meeting_audio.webm",
+            content=content,
+            content_type=audio.content_type,
+        )
+    except TimeoutError as exc:
+        raise HTTPException(status_code=504, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Speech service unreachable or error: {exc!s}",
+        ) from exc
     transcript_row = db.query(Transcript).filter(Transcript.meeting_id == meeting_id).first()
     if transcript_row:
         transcript_row.transcript_text = transcript
