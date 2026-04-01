@@ -337,7 +337,7 @@ export default function HomePage() {
       <section className="card">
         <h2 className="card__title">Диктофон</h2>
         <p className="card__desc">
-          Запись через микрофон браузера. После «Стоп» отправьте на расшифровку (нужен ключ OpenAI для Whisper API).
+          Запись через микрофон браузера. После «Стоп» — «Расшифровать»: на сервере используется локальный Whisper (Docker whisper-api) или OpenAI — см. README / STT_PROVIDER.
         </p>
         {recError ? <p className="card__desc" style={{ color: "var(--danger)" }}>{recError}</p> : null}
         <div className="dictaphone-timer">{formatTime(elapsed)}</div>

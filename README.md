@@ -67,6 +67,27 @@ Mini App в Telegram открывается **только по HTTPS** (обы�
    - Redis: `localhost:6379`
    - MinIO API: `localhost:9000`
    - MinIO Console: `localhost:9001`
+   - Whisper API ([Hipc/whisper-api](https://github.com/Hipc/whisper-api)): `localhost:8100`
+
+## Self-hosted Whisper (Hipc/whisper-api)
+
+В `docker-compose.yml` добавлен сервис **`whisper-api`** на образе `hipc/whisper-api` (см. [репозиторий](https://github.com/Hipc/whisper-api)). Backend по умолчанию в Compose использует **`STT_PROVIDER=hipc_whisper_api`** и шлёт аудио на `POST /transcribe` (поле `audio_file`), затем опрашивает `GET /task/{task_id}` до готовности.
+
+Переменные (см. `.env.example`):
+
+- `STT_PROVIDER` — `hipc_whisper_api` (локальный Docker) или `openai_whisper_api` (облако OpenAI, нужен `OPENAI_API_KEY`).
+- `WHISPER_API_BASE_URL` — в Docker сети по умолчанию `http://whisper-api:8100`; если backend без Docker — `http://localhost:8100`.
+- `WHISPER_API_POLL_TIMEOUT` — максимум секунд ожидания результата (по умолчанию `600`).
+- `WHISPER_API_LANGUAGE` — опционально код языка для Whisper (query-параметр `language` у Hipc API).
+
+Первый запуск контейнера может занять время: подтягивается модель **Whisper turbo**, нужны **RAM** (ориентир **4+ ГБ** под сервис; на CPU длинные файлы обрабатываются медленно). Логи: `docker logs helper-whisper-api -f`.
+
+Проверка API напрямую:
+
+```bash
+curl -sS http://localhost:8100/task/00000000-0000-0000-0000-000000000000
+# ожидаемо 404 если задачи нет — значит сервис поднялся
+```
 
 ## Prototype API Endpoints
 
@@ -77,7 +98,7 @@ Mini App в Telegram открывается **только по HTTPS** (обы�
 - `GET /meetings/{id}/protocol`
 - `POST /meetings/start`
 - `POST /meetings/stop`
-- `POST /meetings/{id}/transcribe` (multipart with `audio` file; Whisper API if `OPENAI_API_KEY` is set)
+- `POST /meetings/{id}/transcribe` (multipart `audio`; STT: Hipc [whisper-api](https://github.com/Hipc/whisper-api) в Docker или OpenAI при `STT_PROVIDER=openai_whisper_api`)
 - `POST /meetings/{id}/protocol-draft` (stub draft)
 - `POST /meetings/{id}/start-demo-flow` (stub chain: transcript + protocol in one call)
 - `POST /assistant/execute` (ClawBot integration point + local stub fallback)
@@ -97,7 +118,7 @@ Meeting state, transcript, and protocol draft are now persisted in PostgreSQL.
 ## Next steps toward a working end-user prototype
 
 - Telegram Bot + Mini App: базовый polling-бот, HTTPS через туннель, проверка `initData` — уже в репо; дальше — webhook на проде и жёсткая привязка сессий к `user.id`.
-- Secrets: set `TELEGRAM_BOT_TOKEN`, `OPENAI_API_KEY` (Whisper API), optional `CLAWBOT_API_URL` / `CLAWBOT_API_KEY` in `.env` and pass into `docker compose`.
+- Secrets: `TELEGRAM_BOT_TOKEN`; для облачного STT — `OPENAI_API_KEY`; локальный Whisper — сервис `whisper-api` + `STT_PROVIDER=hipc_whisper_api`. Опционально `CLAWBOT_*`.
 - Real audio path: record/upload to object storage (MinIO/S3), store `audio_asset` metadata, run STT as a background job (Celery) with status polling.
 - Protocol generation: replace stub with LLM call using stored transcript; add JSON schema validation and versioning on `protocols`.
 - Tasks: create `tasks` from confirmed action items; reminders via worker + Telegram send API.
