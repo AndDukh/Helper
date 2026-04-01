@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .db import Base, engine
+from . import models  # noqa: F401
 from .routers.assistant import router as assistant_router
 from .routers.meetings import router as meetings_router
 
@@ -14,6 +16,11 @@ app.add_middleware(
 )
 app.include_router(meetings_router, prefix="/meetings", tags=["meetings"])
 app.include_router(assistant_router, prefix="/assistant", tags=["assistant"])
+
+
+@app.on_event("startup")
+def on_startup() -> None:
+    Base.metadata.create_all(bind=engine)
 
 
 @app.get("/health")

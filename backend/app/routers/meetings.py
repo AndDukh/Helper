@@ -1,8 +1,11 @@
 from datetime import datetime, timezone
-from uuid import UUID, uuid4
+from uuid import UUID
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from sqlalchemy.orm import Session
 
+from ..db import get_db
+from ..models import Meeting, Protocol, Transcript
 from ..schemas import (
     DemoFlowResponse,
     MeetingResponse,
@@ -14,7 +17,6 @@ from ..schemas import (
 from ..services.stt_service import STTService
 
 router = APIRouter()
-MEETINGS: dict[UUID, MeetingResponse] = {}
 stt_service = STTService()
 
 
@@ -34,42 +36,81 @@ def _build_protocol_stub(meeting_id: UUID, title: str) -> ProtocolDraftResponse:
 
 
 @router.post("/start", response_model=MeetingResponse)
-def start_meeting(payload: MeetingStartRequest) -> MeetingResponse:
-    meeting = MeetingResponse(
-        id=uuid4(),
+def start_meeting(payload: MeetingStartRequest, db: Session = Depends(get_db)) -> MeetingResponse:
+    meeting = Meeting(
         title=payload.title,
         status="recording",
         started_at=datetime.now(tz=timezone.utc),
     )
-    MEETINGS[meeting.id] = meeting
-    return meeting
+    db.add(meeting)
+    db.commit()
+    db.refresh(meeting)
+    return MeetingResponse(
+        id=meeting.id,
+        title=meeting.title,
+        status=meeting.status,
+        started_at=meeting.started_at,
+        stopped_at=meeting.stopped_at,
+    )
 
 
 @router.post("/stop", response_model=MeetingResponse)
-def stop_meeting(payload: MeetingStopRequest) -> MeetingResponse:
-    meeting = MEETINGS.get(payload.meeting_id)
+def stop_meeting(payload: MeetingStopRequest, db: Session = Depends(get_db)) -> MeetingResponse:
+    meeting = db.get(Meeting, payload.meeting_id)
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
     if meeting.status == "stopped":
-        return meeting
+        return MeetingResponse(
+            id=meeting.id,
+            title=meeting.title,
+            status=meeting.status,
+            started_at=meeting.started_at,
+            stopped_at=meeting.stopped_at,
+        )
 
     meeting.status = "stopped"
     meeting.stopped_at = datetime.now(tz=timezone.utc)
-    return meeting
+    db.add(meeting)
+    db.commit()
+    db.refresh(meeting)
+    return MeetingResponse(
+        id=meeting.id,
+        title=meeting.title,
+        status=meeting.status,
+        started_at=meeting.started_at,
+        stopped_at=meeting.stopped_at,
+    )
 
 
 @router.post("/{meeting_id}/protocol-draft", response_model=ProtocolDraftResponse)
-def generate_protocol_stub(meeting_id: UUID) -> ProtocolDraftResponse:
-    meeting = MEETINGS.get(meeting_id)
+def generate_protocol_stub(meeting_id: UUID, db: Session = Depends(get_db)) -> ProtocolDraftResponse:
+    meeting = db.get(Meeting, meeting_id)
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
-    return _build_protocol_stub(meeting_id=meeting_id, title=meeting.title)
+    protocol_payload = _build_protocol_stub(meeting_id=meeting_id, title=meeting.title)
+    protocol_row = db.query(Protocol).filter(Protocol.meeting_id == meeting_id).first()
+    if protocol_row:
+        protocol_row.summary = protocol_payload.summary
+        protocol_row.decisions = protocol_payload.decisions
+        protocol_row.action_items = protocol_payload.action_items
+    else:
+        protocol_row = Protocol(
+            meeting_id=meeting_id,
+            summary=protocol_payload.summary,
+            decisions=protocol_payload.decisions,
+            action_items=protocol_payload.action_items,
+        )
+        db.add(protocol_row)
+    db.commit()
+    return protocol_payload
 
 
 @router.post("/{meeting_id}/transcribe", response_model=TranscriptResponse)
-async def transcribe_meeting_audio(meeting_id: UUID, audio: UploadFile = File(...)) -> TranscriptResponse:
-    meeting = MEETINGS.get(meeting_id)
+async def transcribe_meeting_audio(
+    meeting_id: UUID, audio: UploadFile = File(...), db: Session = Depends(get_db)
+) -> TranscriptResponse:
+    meeting = db.get(Meeting, meeting_id)
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
@@ -82,12 +123,19 @@ async def transcribe_meeting_audio(meeting_id: UUID, audio: UploadFile = File(..
         content=content,
         content_type=audio.content_type,
     )
+    transcript_row = db.query(Transcript).filter(Transcript.meeting_id == meeting_id).first()
+    if transcript_row:
+        transcript_row.transcript_text = transcript
+    else:
+        transcript_row = Transcript(meeting_id=meeting_id, transcript_text=transcript)
+        db.add(transcript_row)
+    db.commit()
     return TranscriptResponse(meeting_id=meeting_id, transcript_text=transcript)
 
 
 @router.post("/{meeting_id}/start-demo-flow", response_model=DemoFlowResponse)
-def start_demo_flow(meeting_id: UUID) -> DemoFlowResponse:
-    meeting = MEETINGS.get(meeting_id)
+def start_demo_flow(meeting_id: UUID, db: Session = Depends(get_db)) -> DemoFlowResponse:
+    meeting = db.get(Meeting, meeting_id)
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
@@ -98,5 +146,34 @@ def start_demo_flow(meeting_id: UUID) -> DemoFlowResponse:
             "Configured for prototype flow without uploading real audio."
         ),
     )
+    transcript_row = db.query(Transcript).filter(Transcript.meeting_id == meeting_id).first()
+    if transcript_row:
+        transcript_row.transcript_text = transcript.transcript_text
+    else:
+        transcript_row = Transcript(meeting_id=meeting_id, transcript_text=transcript.transcript_text)
+        db.add(transcript_row)
+
     protocol = _build_protocol_stub(meeting_id=meeting_id, title=meeting.title)
-    return DemoFlowResponse(meeting=meeting, transcript=transcript, protocol=protocol)
+    protocol_row = db.query(Protocol).filter(Protocol.meeting_id == meeting_id).first()
+    if protocol_row:
+        protocol_row.summary = protocol.summary
+        protocol_row.decisions = protocol.decisions
+        protocol_row.action_items = protocol.action_items
+    else:
+        protocol_row = Protocol(
+            meeting_id=meeting_id,
+            summary=protocol.summary,
+            decisions=protocol.decisions,
+            action_items=protocol.action_items,
+        )
+        db.add(protocol_row)
+    db.commit()
+
+    meeting_response = MeetingResponse(
+        id=meeting.id,
+        title=meeting.title,
+        status=meeting.status,
+        started_at=meeting.started_at,
+        stopped_at=meeting.stopped_at,
+    )
+    return DemoFlowResponse(meeting=meeting_response, transcript=transcript, protocol=protocol)

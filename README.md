@@ -32,6 +32,8 @@ Helper is a Telegram Mini App + Bot for meeting capture, protocol generation, ta
 - `POST /meetings/{id}/start-demo-flow` (stub chain: transcript + protocol in one call)
 - `POST /assistant/execute` (ClawBot integration point + local stub fallback)
 
+Meeting state, transcript, and protocol draft are now persisted in PostgreSQL.
+
 ## Next
 
 Detailed execution plan and sprint backlog are in:
