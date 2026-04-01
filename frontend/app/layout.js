@@ -1,4 +1,13 @@
 import Script from "next/script";
+import { Inter } from "next/font/google";
+
+import "./globals.css";
+
+const inter = Inter({
+  subsets: ["latin", "cyrillic"],
+  variable: "--font-inter",
+  display: "swap",
+});
 
 export const metadata = {
   title: "Helper Mini App",
@@ -7,8 +16,8 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
-      <body style={{ fontFamily: "sans-serif", margin: 0, padding: 24 }}>
+    <html lang="ru" className={inter.variable}>
+      <body>
         <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
         {children}
       </body>

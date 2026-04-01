@@ -22,20 +22,23 @@ Mini App в Telegram открывается **только по HTTPS** (обы�
 
 **Важно:** не коммитьте реальные токены. Если токен когда-либо попал в git или в чат — отзовите его в BotFather и выдайте новый.
 
-### 2) Туннель на локальный фронт (пример: ngrok)
+### 2) Туннель на порт 3000 и `WEBAPP_URL` — пошагово
 
-Установите [ngrok](https://ngrok.com/) (или аналог: Cloudflare Tunnel, localtunnel).
+Почему так: клиент Telegram открывает Mini App **только по публичному HTTPS**. Адрес `http://localhost:3000` с телефона недоступен, поэтому нужен **туннель**: внешний `https://…` ведёт на ваш локальный порт **3000** (Next.js). API проксируется с того же домена через `/api/*`, отдельный туннель на 8000 не обязателен.
 
-```bash
-docker compose up -d
-ngrok http 3000
-```
+1. Установите [ngrok](https://ngrok.com/) (или [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/), [localtunnel](https://localtunnel.github.io/www/)).
+2. В корне репозитория запустите стек: `docker compose up -d` (должны слушать **3000** и **8000** на машине).
+3. В **отдельном** терминале выполните: `ngrok http 3000`.
+4. В выводе ngrok найдите строку **Forwarding** с **https://** (например `https://abc123.ngrok-free.app`).
+5. Откройте файл **`.env`** в корне проекта и пропишите (подставьте свой URL, без пути к странице):
+   - `WEBAPP_URL=https://abc123.ngrok-free.app`
+6. Сохраните `.env` и перезапустите бота (чтобы подтянулся новый URL):
+   - `docker compose up -d --force-recreate telegram-bot`
+7. При **смене** URL ngrok (каждый новый запуск в бесплатном режиме часто даёт новый домен) снова обновите `WEBAPP_URL` и снова выполните шаг 6.
 
-Скопируйте выданный **https** URL в `WEBAPP_URL` в `.env`, затем:
+**Проверка без Telegram:** в браузере откройте `http://localhost:3000` — интерфейс и `/api` работают локально.
 
-```bash
-docker compose up -d --force-recreate telegram-bot backend frontend
-```
+**Проверка с Telegram:** откройте бота → `/start` → кнопка Mini App — должен открыться ваш ngrok-URL.
 
 ### 3) Проверка в Telegram
 
