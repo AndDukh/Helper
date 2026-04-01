@@ -55,6 +55,22 @@ Mini App в Telegram открывается **только по HTTPS** (обы�
 - Проверка `initData` сработает **только** при открытии страницы из Telegram (кнопка Mini App).
 - Прямой смоук API: `curl http://localhost:8000/health` и эндпоинты из списка ниже.
 
+## Доступ с вашего компьютера (localhost)
+
+После `docker compose up -d` откройте в браузере на **той же машине**, где запущен Docker:
+
+| Сервис | URL |
+|--------|-----|
+| Mini App (UI) | [http://localhost:3000](http://localhost:3000) или [http://127.0.0.1:3000](http://127.0.0.1:3000) |
+| Backend API | [http://localhost:8000/health](http://localhost:8000/health) |
+| Whisper API | [http://localhost:8100](http://localhost:8100) |
+| MinIO (S3) | [http://localhost:9000](http://localhost:9000) |
+| MinIO Console | [http://localhost:9001](http://localhost:9001) |
+
+Запросы из браузера на `localhost:3000` идут на API через **тот же origin**: `/api/...` → Next.js проксирует на backend в Docker (`API_PROXY_TARGET`).
+
+Фронт в контейнере запускается как **`next dev -H 0.0.0.0`**, чтобы порт **3000** был доступен с хоста по `localhost` (иначе Next по умолчанию слушал бы только loopback внутри контейнера).
+
 ## Local Development (initial)
 
 1. Copy env template:
@@ -68,6 +84,7 @@ Mini App в Telegram открывается **только по HTTPS** (обы�
    - MinIO API: `localhost:9000`
    - MinIO Console: `localhost:9001`
    - Whisper API ([Hipc/whisper-api](https://github.com/Hipc/whisper-api)): `localhost:8100`
+   - Mini App: `localhost:3000`, Backend: `localhost:8000`
 
 ## Self-hosted Whisper (Hipc/whisper-api)
 
