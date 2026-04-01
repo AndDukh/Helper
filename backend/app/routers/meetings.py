@@ -59,6 +59,37 @@ def get_meeting(meeting_id: UUID, db: Session = Depends(get_db)) -> MeetingRespo
     return _to_meeting_response(meeting)
 
 
+@router.get("/{meeting_id}/transcript", response_model=TranscriptResponse)
+def get_meeting_transcript(meeting_id: UUID, db: Session = Depends(get_db)) -> TranscriptResponse:
+    meeting = db.get(Meeting, meeting_id)
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    transcript_row = db.query(Transcript).filter(Transcript.meeting_id == meeting_id).first()
+    if not transcript_row:
+        raise HTTPException(status_code=404, detail="Transcript not found")
+
+    return TranscriptResponse(meeting_id=meeting_id, transcript_text=transcript_row.transcript_text)
+
+
+@router.get("/{meeting_id}/protocol", response_model=ProtocolDraftResponse)
+def get_meeting_protocol(meeting_id: UUID, db: Session = Depends(get_db)) -> ProtocolDraftResponse:
+    meeting = db.get(Meeting, meeting_id)
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    protocol_row = db.query(Protocol).filter(Protocol.meeting_id == meeting_id).first()
+    if not protocol_row:
+        raise HTTPException(status_code=404, detail="Protocol not found")
+
+    return ProtocolDraftResponse(
+        meeting_id=meeting_id,
+        summary=protocol_row.summary,
+        decisions=protocol_row.decisions,
+        action_items=protocol_row.action_items,
+    )
+
+
 @router.post("/start", response_model=MeetingResponse)
 def start_meeting(payload: MeetingStartRequest, db: Session = Depends(get_db)) -> MeetingResponse:
     meeting = Meeting(
