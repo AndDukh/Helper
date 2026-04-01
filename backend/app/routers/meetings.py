@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from ..schemas import (
+    DemoFlowResponse,
     MeetingResponse,
     MeetingStartRequest,
     MeetingStopRequest,
@@ -15,6 +16,21 @@ from ..services.stt_service import STTService
 router = APIRouter()
 MEETINGS: dict[UUID, MeetingResponse] = {}
 stt_service = STTService()
+
+
+def _build_protocol_stub(meeting_id: UUID, title: str) -> ProtocolDraftResponse:
+    return ProtocolDraftResponse(
+        meeting_id=meeting_id,
+        summary=f"Draft summary for '{title}'.",
+        decisions=[
+            "Ship MVP meeting flow in sprint 1-2.",
+            "Validate reminder UX with pilot users.",
+        ],
+        action_items=[
+            {"owner": "and", "task": "Finalize API contracts", "due_date": "2026-04-05"},
+            {"owner": "team", "task": "Prepare demo flow", "due_date": "2026-04-08"},
+        ],
+    )
 
 
 @router.post("/start", response_model=MeetingResponse)
@@ -48,18 +64,7 @@ def generate_protocol_stub(meeting_id: UUID) -> ProtocolDraftResponse:
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
-    return ProtocolDraftResponse(
-        meeting_id=meeting_id,
-        summary=f"Draft summary for '{meeting.title}'.",
-        decisions=[
-            "Ship MVP meeting flow in sprint 1-2.",
-            "Validate reminder UX with pilot users.",
-        ],
-        action_items=[
-            {"owner": "and", "task": "Finalize API contracts", "due_date": "2026-04-05"},
-            {"owner": "team", "task": "Prepare demo flow", "due_date": "2026-04-08"},
-        ],
-    )
+    return _build_protocol_stub(meeting_id=meeting_id, title=meeting.title)
 
 
 @router.post("/{meeting_id}/transcribe", response_model=TranscriptResponse)
@@ -78,3 +83,20 @@ async def transcribe_meeting_audio(meeting_id: UUID, audio: UploadFile = File(..
         content_type=audio.content_type,
     )
     return TranscriptResponse(meeting_id=meeting_id, transcript_text=transcript)
+
+
+@router.post("/{meeting_id}/start-demo-flow", response_model=DemoFlowResponse)
+def start_demo_flow(meeting_id: UUID) -> DemoFlowResponse:
+    meeting = MEETINGS.get(meeting_id)
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    transcript = TranscriptResponse(
+        meeting_id=meeting_id,
+        transcript_text=(
+            f"Demo transcript for '{meeting.title}'. "
+            "Configured for prototype flow without uploading real audio."
+        ),
+    )
+    protocol = _build_protocol_stub(meeting_id=meeting_id, title=meeting.title)
+    return DemoFlowResponse(meeting=meeting, transcript=transcript, protocol=protocol)

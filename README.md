@@ -29,6 +29,7 @@ Helper is a Telegram Mini App + Bot for meeting capture, protocol generation, ta
 - `POST /meetings/stop`
 - `POST /meetings/{id}/transcribe` (multipart with `audio` file; Whisper API if `OPENAI_API_KEY` is set)
 - `POST /meetings/{id}/protocol-draft` (stub draft)
+- `POST /meetings/{id}/start-demo-flow` (stub chain: transcript + protocol in one call)
 - `POST /assistant/execute` (ClawBot integration point + local stub fallback)
 
 ## Next

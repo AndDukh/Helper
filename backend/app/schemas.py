@@ -43,3 +43,9 @@ class AssistantExecuteResponse(BaseModel):
     status: str
     summary: str
     artifact: str
+
+
+class DemoFlowResponse(BaseModel):
+    meeting: MeetingResponse
+    transcript: TranscriptResponse
+    protocol: ProtocolDraftResponse
