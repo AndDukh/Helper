@@ -51,6 +51,35 @@ def list_meetings(db: Session = Depends(get_db)) -> list[MeetingResponse]:
     return [_to_meeting_response(meeting) for meeting in meetings]
 
 
+@router.post("/start", response_model=MeetingResponse)
+def start_meeting(payload: MeetingStartRequest, db: Session = Depends(get_db)) -> MeetingResponse:
+    meeting = Meeting(
+        title=payload.title,
+        status="recording",
+        started_at=datetime.now(tz=timezone.utc),
+    )
+    db.add(meeting)
+    db.commit()
+    db.refresh(meeting)
+    return _to_meeting_response(meeting)
+
+
+@router.post("/stop", response_model=MeetingResponse)
+def stop_meeting(payload: MeetingStopRequest, db: Session = Depends(get_db)) -> MeetingResponse:
+    meeting = db.get(Meeting, payload.meeting_id)
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    if meeting.status == "stopped":
+        return _to_meeting_response(meeting)
+
+    meeting.status = "stopped"
+    meeting.stopped_at = datetime.now(tz=timezone.utc)
+    db.add(meeting)
+    db.commit()
+    db.refresh(meeting)
+    return _to_meeting_response(meeting)
+
+
 @router.get("/{meeting_id}", response_model=MeetingResponse)
 def get_meeting(meeting_id: UUID, db: Session = Depends(get_db)) -> MeetingResponse:
     meeting = db.get(Meeting, meeting_id)
@@ -88,35 +117,6 @@ def get_meeting_protocol(meeting_id: UUID, db: Session = Depends(get_db)) -> Pro
         decisions=protocol_row.decisions,
         action_items=protocol_row.action_items,
     )
-
-
-@router.post("/start", response_model=MeetingResponse)
-def start_meeting(payload: MeetingStartRequest, db: Session = Depends(get_db)) -> MeetingResponse:
-    meeting = Meeting(
-        title=payload.title,
-        status="recording",
-        started_at=datetime.now(tz=timezone.utc),
-    )
-    db.add(meeting)
-    db.commit()
-    db.refresh(meeting)
-    return _to_meeting_response(meeting)
-
-
-@router.post("/stop", response_model=MeetingResponse)
-def stop_meeting(payload: MeetingStopRequest, db: Session = Depends(get_db)) -> MeetingResponse:
-    meeting = db.get(Meeting, payload.meeting_id)
-    if not meeting:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-    if meeting.status == "stopped":
-        return _to_meeting_response(meeting)
-
-    meeting.status = "stopped"
-    meeting.stopped_at = datetime.now(tz=timezone.utc)
-    db.add(meeting)
-    db.commit()
-    db.refresh(meeting)
-    return _to_meeting_response(meeting)
 
 
 @router.post("/{meeting_id}/protocol-draft", response_model=ProtocolDraftResponse)

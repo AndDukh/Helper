@@ -38,6 +38,24 @@ Helper is a Telegram Mini App + Bot for meeting capture, protocol generation, ta
 
 Meeting state, transcript, and protocol draft are now persisted in PostgreSQL.
 
+## Debugging checklist
+
+- Confirm Docker is available: `docker --version` and `docker compose version`.
+- Start stack: `docker compose up -d` (from repo root).
+- Check containers: `docker compose ps` and `docker logs helper-backend --tail 50`.
+- API smoke test:
+  - `curl -sS http://localhost:8000/health`
+  - `curl -sS -X POST http://localhost:8000/meetings/start -H 'Content-Type: application/json' -d '{"title":"Smoke test"}'`
+
+## Next steps toward a working end-user prototype
+
+- Telegram Bot + Mini App: create bot in BotFather, host Mini App over HTTPS, validate `initData` on the backend.
+- Secrets: set `TELEGRAM_BOT_TOKEN`, `OPENAI_API_KEY` (Whisper API), optional `CLAWBOT_API_URL` / `CLAWBOT_API_KEY` in `.env` and pass into `docker compose`.
+- Real audio path: record/upload to object storage (MinIO/S3), store `audio_asset` metadata, run STT as a background job (Celery) with status polling.
+- Protocol generation: replace stub with LLM call using stored transcript; add JSON schema validation and versioning on `protocols`.
+- Tasks: create `tasks` from confirmed action items; reminders via worker + Telegram send API.
+- Hardening: Alembic migrations (replace `create_all`), structured logging, basic auth/rate limits on public API.
+
 ## Next
 
 Detailed execution plan and sprint backlog are in:
