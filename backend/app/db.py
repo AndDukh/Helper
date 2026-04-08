@@ -11,7 +11,7 @@ class Base(DeclarativeBase):
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql+psycopg://helper:helper@postgres:5432/helper",
+    "postgresql+psycopg2://helper:helper@postgres:5432/helper",
 )
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
