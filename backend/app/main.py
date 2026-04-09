@@ -1,6 +1,6 @@
 import os
+import shutil
 
-import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -35,19 +35,25 @@ def health() -> dict[str, str]:
 
 @app.get("/health/stt")
 async def health_stt() -> dict:
-    """Check connectivity to configured speech-to-text backend (Hipc whisper-api in Docker)."""
-    provider = os.getenv("STT_PROVIDER", "openai_whisper_api")
-    if provider != "hipc_whisper_api":
+    """Check configured STT mode and local Whisper prerequisites."""
+    provider = os.getenv("STT_PROVIDER", "openai_whisper_local")
+    if provider == "openai_whisper_local":
+        ffmpeg_ok = shutil.which("ffmpeg") is not None
         return {
             "provider": provider,
-            "hipc_whisper_api": None,
-            "note": "Set STT_PROVIDER=hipc_whisper_api to use local whisper-api container.",
+            "model": os.getenv("WHISPER_MODEL", "small"),
+            "ffmpeg_installed": ffmpeg_ok,
+            "reachable": ffmpeg_ok,
+            "note": "Local openai/whisper model is used in backend process.",
         }
-    base = os.getenv("WHISPER_API_BASE_URL", "http://whisper-api:8100").rstrip("/")
-    try:
-        async with httpx.AsyncClient(timeout=8.0) as client:
-            response = await client.get(f"{base}/tasks")
-            response.raise_for_status()
-        return {"provider": provider, "base": base, "reachable": True}
-    except Exception as exc:
-        return {"provider": provider, "base": base, "reachable": False, "error": str(exc)}
+    if provider == "openai_whisper_api":
+        return {
+            "provider": provider,
+            "reachable": bool(os.getenv("OPENAI_API_KEY", "").strip()),
+            "note": "Cloud Whisper via OpenAI API.",
+        }
+    return {
+        "provider": provider,
+        "reachable": False,
+        "note": "Unknown STT provider.",
+    }

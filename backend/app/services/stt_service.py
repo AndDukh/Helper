@@ -1,27 +1,28 @@
-import asyncio
 import os
-import time
+import tempfile
+from typing import Any
 
 import httpx
 
 
 class STTService:
+    _whisper_model: Any = None
+
     def __init__(self) -> None:
-        self.provider = os.getenv("STT_PROVIDER", "openai_whisper_api")
+        self.provider = os.getenv("STT_PROVIDER", "openai_whisper_local")
         self.openai_api_key = os.getenv("OPENAI_API_KEY", "")
-        self.whisper_api_base = os.getenv("WHISPER_API_BASE_URL", "http://whisper-api:8100").rstrip("/")
-        self.whisper_poll_seconds = float(os.getenv("WHISPER_API_POLL_TIMEOUT", "600"))
+        self.whisper_model_name = os.getenv("WHISPER_MODEL", "small").strip() or "small"
 
     async def transcribe(self, filename: str, content: bytes, content_type: str | None) -> str:
-        if self.provider == "hipc_whisper_api":
-            return await self._transcribe_hipc_whisper_api(filename, content, content_type)
+        if self.provider == "openai_whisper_local":
+            return await self._transcribe_local_whisper(filename, content)
 
         if self.provider == "openai_whisper_api" and self.openai_api_key:
             return await self._transcribe_openai(filename, content, content_type)
 
         # Fallback stub for local development without API key.
         return (
-            "Stub transcript: set STT_PROVIDER=hipc_whisper_api (with whisper-api container) "
+            "Stub transcript: set STT_PROVIDER=openai_whisper_local (recommended) "
             "or OPENAI_API_KEY for OpenAI Whisper API."
         )
 
@@ -40,40 +41,26 @@ class STTService:
             response.raise_for_status()
             return response.text.strip()
 
-    async def _transcribe_hipc_whisper_api(
-        self, filename: str, content: bytes, content_type: str | None
-    ) -> str:
-        """
-        Self-hosted Whisper REST API (async job + poll), e.g. https://github.com/Hipc/whisper-api
-        """
-        base = self.whisper_api_base
-        language = os.getenv("WHISPER_API_LANGUAGE", "").strip() or None
+    async def _transcribe_local_whisper(self, filename: str, content: bytes) -> str:
+        try:
+            import whisper
+        except Exception as exc:
+            raise RuntimeError(
+                "Local Whisper is not available. Install openai-whisper and ffmpeg."
+            ) from exc
 
-        params = {"language": language} if language else None
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            files = {"audio_file": (filename, content, content_type or "application/octet-stream")}
-            response = await client.post(f"{base}/transcribe", files=files, params=params)
-            response.raise_for_status()
-            payload = response.json()
-            task_id = payload.get("task_id")
-            if not task_id:
-                raise RuntimeError("whisper-api: missing task_id in response")
+        if STTService._whisper_model is None:
+            STTService._whisper_model = whisper.load_model(self.whisper_model_name)
 
-        deadline = time.monotonic() + self.whisper_poll_seconds
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            while time.monotonic() < deadline:
-                await asyncio.sleep(0.5)
-                response = await client.get(f"{base}/task/{task_id}")
-                response.raise_for_status()
-                body = response.json()
-                data = body.get("data") or {}
-                status = data.get("status")
-                if status == "completed":
-                    result = data.get("result") or {}
-                    text = (result.get("text") or "").strip()
-                    return text if text else "(empty transcript)"
-                if status == "failed":
-                    err = data.get("error") or "transcription failed"
-                    raise RuntimeError(f"whisper-api: {err}")
+        suffix = ""
+        if "." in filename:
+            suffix = filename[filename.rfind(".") :]
+        if not suffix:
+            suffix = ".webm"
 
-        raise TimeoutError(f"whisper-api: timeout after {self.whisper_poll_seconds}s for task {task_id}")
+        with tempfile.NamedTemporaryFile(delete=True, suffix=suffix) as tmp:
+            tmp.write(content)
+            tmp.flush()
+            result = STTService._whisper_model.transcribe(tmp.name)
+            text = (result.get("text") or "").strip()
+            return text if text else "(empty transcript)"

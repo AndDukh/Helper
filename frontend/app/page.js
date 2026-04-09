@@ -10,6 +10,21 @@ function formatTime(totalSeconds) {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
+function formatDate(iso) {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleString("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
 function pickMimeType() {
   const candidates = [
     "audio/webm;codecs=opus",
@@ -31,6 +46,14 @@ export default function HomePage() {
   const [output, setOutput] = useState(null);
   const [loading, setLoading] = useState(false);
   const [telegramHint, setTelegramHint] = useState("");
+  const [recordings, setRecordings] = useState([]);
+  const [protocolLibrary, setProtocolLibrary] = useState([]);
+  const [protocolLoading, setProtocolLoading] = useState(false);
+  const [integrationStatus, setIntegrationStatus] = useState("Интеграции еще не подключены.");
+  const [providerStatus, setProviderStatus] = useState("Внешние AI-провайдеры не подключены.");
+  const [kimiTask, setKimiTask] = useState("Собрать ресерч и презентацию по итогам встречи");
+  const [executionResult, setExecutionResult] = useState(null);
+  const [cloudService, setCloudService] = useState("google_drive");
 
   const [recState, setRecState] = useState("idle");
   const [elapsed, setElapsed] = useState(0);
@@ -50,12 +73,6 @@ export default function HomePage() {
       tg.expand();
       setTelegramHint("Открыто в Telegram — доступен контекст Mini App.");
       const p = tg.themeParams;
-      if (p?.bg_color) document.documentElement.style.setProperty("--bg", p.bg_color);
-      if (p?.secondary_bg_color) {
-        document.documentElement.style.setProperty("--bg-card", p.secondary_bg_color);
-      }
-      if (p?.text_color) document.documentElement.style.setProperty("--text", p.text_color);
-      if (p?.hint_color) document.documentElement.style.setProperty("--text-muted", p.hint_color);
       if (p?.link_color) document.documentElement.style.setProperty("--accent", p.link_color);
     } else {
       setTelegramHint("Локальный режим. Для Telegram нужен HTTPS-туннель (см. README).");
@@ -66,8 +83,47 @@ export default function HomePage() {
     return () => {
       if (tickRef.current) clearInterval(tickRef.current);
       streamRef.current?.getTracks().forEach((t) => t.stop());
+      recordings.forEach((item) => URL.revokeObjectURL(item.url));
     };
+  }, [recordings]);
+
+  const loadProtocolLibrary = useCallback(async () => {
+    setProtocolLoading(true);
+    try {
+      const meetingsRes = await fetch(`${apiBase}/meetings`);
+      const meetingsData = await meetingsRes.json();
+      if (!meetingsRes.ok || !Array.isArray(meetingsData)) throw new Error("Не удалось получить список встреч.");
+      const subset = meetingsData.slice(0, 12);
+      const protocolResults = await Promise.all(
+        subset.map(async (meeting) => {
+          try {
+            const protocolRes = await fetch(`${apiBase}/meetings/${meeting.id}/protocol`);
+            if (!protocolRes.ok) return null;
+            const protocolData = await protocolRes.json();
+            return {
+              meetingId: meeting.id,
+              title: meeting.title,
+              startedAt: meeting.started_at,
+              summary: protocolData.summary,
+              decisions: protocolData.decisions || [],
+              actionItems: protocolData.action_items || [],
+            };
+          } catch {
+            return null;
+          }
+        })
+      );
+      setProtocolLibrary(protocolResults.filter(Boolean));
+    } catch (error) {
+      setOutput({ error: error.message });
+    } finally {
+      setProtocolLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadProtocolLibrary();
+  }, [loadProtocolLibrary]);
 
   const stopTick = useCallback(() => {
     if (tickRef.current) {
@@ -112,6 +168,22 @@ export default function HomePage() {
         const type = mr.mimeType || mimeType || "audio/webm";
         const blob = new Blob(chunksRef.current, { type });
         setRecordedBlob(blob);
+        const ext = type.includes("webm") ? "webm" : type.includes("mp4") ? "m4a" : "audio";
+        const url = URL.createObjectURL(blob);
+        setRecordings((prev) => {
+          const item = {
+            id: crypto.randomUUID(),
+            name: `Запись ${new Date().toLocaleTimeString("ru-RU")} (${ext})`,
+            url,
+            createdAt: new Date().toISOString(),
+            sizeKb: Math.round(blob.size / 1024),
+          };
+          const next = [item, ...prev].slice(0, 3);
+          if (prev.length >= 3) {
+            prev.slice(2).forEach((old) => URL.revokeObjectURL(old.url));
+          }
+          return next;
+        });
         setRecState("stopped");
       };
       mr.start(1000);
@@ -247,6 +319,7 @@ export default function HomePage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Транскрибация не удалась");
       setOutput(data);
+      await loadProtocolLibrary();
     } catch (error) {
       setOutput({ error: error.message });
     } finally {
@@ -268,6 +341,7 @@ export default function HomePage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Demo flow не выполнен");
       setOutput(data);
+      await loadProtocolLibrary();
     } catch (error) {
       setOutput({ error: error.message });
     } finally {
@@ -283,6 +357,110 @@ export default function HomePage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Проверка не удалась");
       setOutput(data);
+    } catch (error) {
+      setOutput({ error: error.message });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function connectIntegration(service) {
+    setLoading(true);
+    setExecutionResult(null);
+    try {
+      const data = await postJson("/assistant/integrations/connect", { service });
+      setIntegrationStatus(`${data.service}: ${data.note}`);
+    } catch (error) {
+      setOutput({ error: error.message });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function connectAIProvider(provider) {
+    setLoading(true);
+    setExecutionResult(null);
+    try {
+      const data = await postJson("/assistant/providers/connect", { provider });
+      setProviderStatus(`${data.provider}: ${data.note}`);
+    } catch (error) {
+      setOutput({ error: error.message });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function transcribeAndAutoProtocol() {
+    if (!meetingId) {
+      setOutput({ error: "Сначала создайте встречу (Старт)." });
+      return;
+    }
+    const file = buildAudioFileForUpload();
+    if (!file) {
+      setOutput({ error: "Нужно записать или загрузить аудио." });
+      return;
+    }
+    setLoading(true);
+    setExecutionResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("audio", file);
+      const response = await fetch(`${apiBase}/meetings/${meetingId}/auto-protocol`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Автопротокол не выполнен");
+      setOutput(data);
+      await loadProtocolLibrary();
+    } catch (error) {
+      setOutput({ error: error.message });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function executeProtocolTaskInKimi() {
+    if (!meetingId) {
+      setOutput({ error: "Укажите ID встречи для выполнения пункта протокола." });
+      return;
+    }
+    setLoading(true);
+    setOutput(null);
+    try {
+      const data = await postJson("/assistant/protocol/execute-task", {
+        meeting_id: meetingId,
+        task: kimiTask,
+        provider: "kimi",
+      });
+      setExecutionResult(data);
+    } catch (error) {
+      setOutput({ error: error.message });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function saveResultToCloud() {
+    if (!executionResult?.artifact) {
+      setOutput({ error: "Сначала поручите задачу AI и получите результат." });
+      return;
+    }
+    setLoading(true);
+    try {
+      const bytes = new TextEncoder().encode(executionResult.artifact);
+      let binary = "";
+      bytes.forEach((b) => {
+        binary += String.fromCharCode(b);
+      });
+      const contentBase64 = btoa(binary);
+      const data = await postJson("/assistant/integrations/upload", {
+        service: cloudService,
+        filename: `protocol-result-${meetingId || "draft"}.txt`,
+        mime_type: "text/plain",
+        content_base64: contentBase64,
+      });
+      setIntegrationStatus(`${data.note}${data.location ? ` (${data.location})` : ""}`);
     } catch (error) {
       setOutput({ error: error.message });
     } finally {
@@ -314,6 +492,43 @@ export default function HomePage() {
             Проверить сессию
           </button>
         </div>
+      </section>
+
+      <section className="card">
+        <h2 className="card__title">Интеграции: календари и файловые сервисы</h2>
+        <p className="card__desc">Подключение внешних систем для материалов и планирования.</p>
+        <div className="btn-row">
+          <button type="button" className="btn btn--ghost" onClick={() => connectIntegration("google_calendar")} disabled={loading}>
+            Google Calendar
+          </button>
+          <button type="button" className="btn btn--ghost" onClick={() => connectIntegration("outlook_calendar")} disabled={loading}>
+            Outlook Calendar
+          </button>
+          <button type="button" className="btn btn--ghost" onClick={() => connectIntegration("google_drive")} disabled={loading}>
+            Google Drive
+          </button>
+          <button type="button" className="btn btn--ghost" onClick={() => connectIntegration("dropbox")} disabled={loading}>
+            Dropbox
+          </button>
+        </div>
+        <p className="card__desc" style={{ marginTop: 10 }}>{integrationStatus}</p>
+      </section>
+
+      <section className="card">
+        <h2 className="card__title">Внешние нейросети (Kimi и другие)</h2>
+        <p className="card__desc">AI-агенты для ресерча, поиска информации, презентаций и записок.</p>
+        <div className="btn-row">
+          <button type="button" className="btn btn--ghost" onClick={() => connectAIProvider("kimi")} disabled={loading}>
+            Подключить Kimi
+          </button>
+          <button type="button" className="btn btn--ghost" onClick={() => connectAIProvider("openai")} disabled={loading}>
+            Подключить OpenAI
+          </button>
+          <button type="button" className="btn btn--ghost" onClick={() => connectAIProvider("claude")} disabled={loading}>
+            Подключить Claude
+          </button>
+        </div>
+        <p className="card__desc" style={{ marginTop: 10 }}>{providerStatus}</p>
       </section>
 
       <section className="card">
@@ -352,7 +567,7 @@ export default function HomePage() {
       <section className="card">
         <h2 className="card__title">Диктофон</h2>
         <p className="card__desc">
-          Запись через микрофон браузера. После «Стоп» — «Расшифровать»: на сервере используется локальный Whisper (Docker whisper-api) или OpenAI — см. README / STT_PROVIDER.
+          Запись через микрофон браузера. После «Стоп» — «Расшифровать»: на сервере используется локальный openai/whisper (модель small) или OpenAI API — см. README / STT_PROVIDER.
         </p>
         <div className="btn-row" style={{ marginBottom: 12 }}>
           <button type="button" className="btn btn--ghost" onClick={checkSttHealth} disabled={loading}>
@@ -395,6 +610,14 @@ export default function HomePage() {
           >
             Расшифровать
           </button>
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={transcribeAndAutoProtocol}
+            disabled={loading || !meetingId || (!recordedBlob && !audioFile)}
+          >
+            Транскрибация + автопротокол
+          </button>
         </div>
       </section>
 
@@ -422,15 +645,98 @@ export default function HomePage() {
       </section>
 
       <section className="card">
-        <h2 className="card__title">Ответ API</h2>
-        <p className="card__desc">JSON от последнего действия.</p>
-        {output == null ? (
-          <pre className="output">Выполните действие выше.</pre>
+        <h2 className="card__title">Последние 3 аудиозаписи</h2>
+        <p className="card__desc">Сохраняются в текущей сессии Mini App.</p>
+        {recordings.length === 0 ? (
+          <p className="card__desc">Пока нет записей. Нажмите "Записать".</p>
         ) : (
-          <pre className={`output ${outputIsError ? "output--error" : ""}`}>
-            {JSON.stringify(output, null, 2)}
-          </pre>
+          recordings.map((item) => (
+            <div key={item.id} className="library-item">
+              <div className="library-item__meta">
+                <strong>{item.name}</strong>
+                <span>{formatDate(item.createdAt)} · {item.sizeKb} КБ</span>
+              </div>
+              <audio controls src={item.url} className="audio-player">
+                Ваш браузер не поддерживает аудио.
+              </audio>
+            </div>
+          ))
         )}
+      </section>
+
+      <section className="card">
+        <h2 className="card__title">Протоколы и саммари</h2>
+        <p className="card__desc">Текстовые протоколы по встречам из базы.</p>
+        <div className="btn-row" style={{ marginBottom: 10 }}>
+          <button type="button" className="btn btn--ghost" onClick={loadProtocolLibrary} disabled={loading || protocolLoading}>
+            {protocolLoading ? "Обновляем..." : "Обновить список"}
+          </button>
+        </div>
+        {protocolLibrary.length === 0 ? (
+          <p className="card__desc">Пока нет протоколов. Создайте встречу и выполните "Демо-протокол" или "Расшифровать".</p>
+        ) : (
+          protocolLibrary.map((entry) => (
+            <div key={entry.meetingId} className="library-item">
+              <div className="library-item__meta">
+                <strong>{entry.title}</strong>
+                <span>{formatDate(entry.startedAt)}</span>
+              </div>
+              <p className="library-summary">{entry.summary}</p>
+            </div>
+          ))
+        )}
+        {output && outputIsError ? <p className="card__desc" style={{ color: "var(--danger)" }}>{output.error}</p> : null}
+      </section>
+
+      <section className="card">
+        <h2 className="card__title">Поручение задачи AI</h2>
+        <p className="card__desc">Отправка задачи из автопротокола во внешнюю модель с готовым результатом.</p>
+        <div className="field">
+          <label htmlFor="kimi-task">Задача для выполнения</label>
+          <input
+            id="kimi-task"
+            className="input"
+            value={kimiTask}
+            onChange={(e) => setKimiTask(e.target.value)}
+            placeholder="Например: подготовить презентацию и сопроводительную записку"
+          />
+        </div>
+        <div className="btn-row">
+          <button type="button" className="btn btn--primary" onClick={executeProtocolTaskInKimi} disabled={loading || !meetingId}>
+            Поручить AI
+          </button>
+        </div>
+        {executionResult ? (
+          <div className="library-item" style={{ marginTop: 10 }}>
+            <div className="library-item__meta">
+              <strong>{executionResult.provider}</strong>
+              <span>{executionResult.status}</span>
+            </div>
+            <p className="library-summary">{executionResult.summary}</p>
+            <p className="library-summary" style={{ marginTop: 6 }}>{executionResult.artifact}</p>
+            <div className="btn-row" style={{ marginTop: 10 }}>
+              <button
+                type="button"
+                className={`btn ${cloudService === "google_drive" ? "btn--primary" : "btn--ghost"}`}
+                onClick={() => setCloudService("google_drive")}
+                disabled={loading}
+              >
+                Google Drive
+              </button>
+              <button
+                type="button"
+                className={`btn ${cloudService === "dropbox" ? "btn--primary" : "btn--ghost"}`}
+                onClick={() => setCloudService("dropbox")}
+                disabled={loading}
+              >
+                Dropbox
+              </button>
+              <button type="button" className="btn btn--ghost" onClick={saveResultToCloud} disabled={loading}>
+                Сохранить в облако
+              </button>
+            </div>
+          </div>
+        ) : null}
       </section>
     </div>
   );

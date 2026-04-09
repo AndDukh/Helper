@@ -45,3 +45,16 @@ class Protocol(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(tz=timezone.utc)
     )
+
+
+class IntegrationToken(Base):
+    __tablename__ = "integration_tokens"
+
+    id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    service: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    access_token: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(tz=timezone.utc),
+    )

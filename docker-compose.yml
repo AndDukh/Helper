@@ -1,12 +1,4 @@
 services:
-  # Self-hosted Whisper REST API: https://github.com/Hipc/whisper-api
-  whisper-api:
-    image: hipc/whisper-api:latest
-    container_name: helper-whisper-api
-    restart: unless-stopped
-    ports:
-      - "${WHISPER_API_PORT:-8100}:8100"
-
   backend:
     build: ./backend
     container_name: helper-backend
@@ -15,10 +7,8 @@ services:
       REDIS_URL: redis://redis:6379/0
       DATABASE_URL: postgresql+psycopg://helper:helper@postgres:5432/helper
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
-      STT_PROVIDER: ${STT_PROVIDER:-hipc_whisper_api}
-      WHISPER_API_BASE_URL: ${WHISPER_API_BASE_URL:-http://whisper-api:8100}
-      WHISPER_API_POLL_TIMEOUT: ${WHISPER_API_POLL_TIMEOUT:-600}
-      WHISPER_API_LANGUAGE: ${WHISPER_API_LANGUAGE:-}
+      STT_PROVIDER: ${STT_PROVIDER:-openai_whisper_local}
+      WHISPER_MODEL: ${WHISPER_MODEL:-small}
     ports:
       - "8000:8000"
     depends_on:

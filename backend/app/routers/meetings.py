@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import Meeting, Protocol, Transcript
 from ..schemas import (
+    AutoProtocolResponse,
     DemoFlowResponse,
     MeetingResponse,
     MeetingStartRequest,
@@ -179,6 +180,15 @@ async def transcribe_meeting_audio(
         db.add(transcript_row)
     db.commit()
     return TranscriptResponse(meeting_id=meeting_id, transcript_text=transcript)
+
+
+@router.post("/{meeting_id}/auto-protocol", response_model=AutoProtocolResponse)
+async def transcribe_and_build_protocol(
+    meeting_id: UUID, audio: UploadFile = File(...), db: Session = Depends(get_db)
+) -> AutoProtocolResponse:
+    transcript = await transcribe_meeting_audio(meeting_id=meeting_id, audio=audio, db=db)
+    protocol = generate_protocol_stub(meeting_id=meeting_id, db=db)
+    return AutoProtocolResponse(meeting_id=meeting_id, transcript=transcript, protocol=protocol)
 
 
 @router.post("/{meeting_id}/start-demo-flow", response_model=DemoFlowResponse)
