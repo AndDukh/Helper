@@ -9,6 +9,8 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       STT_PROVIDER: ${STT_PROVIDER:-openai_whisper_local}
       WHISPER_MODEL: ${WHISPER_MODEL:-small}
+      OLLAMA_API_BASE: ${OLLAMA_API_BASE:-http://ollama:11434}
+      LLM_MODEL: ${LLM_MODEL:-mistral}
     ports:
       - "8000:8000"
     depends_on:
@@ -36,6 +38,7 @@ services:
       - "3000:3000"
     depends_on:
       - backend
+      - ollama
 
   telegram-bot:
     build: ./telegram-bot
@@ -46,6 +49,15 @@ services:
       WEBAPP_URL: ${WEBAPP_URL:-}
     depends_on:
       - frontend
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: helper-ollama
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama_data:/root/.ollama
 
   postgres:
     image: postgres:16
@@ -93,3 +105,4 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
+  ollama_data:
