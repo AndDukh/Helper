@@ -11,9 +11,24 @@ from .routers.meetings import router as meetings_router
 from .routers.telegram import router as telegram_router
 
 app = FastAPI(title="Helper API", version="0.1.0")
+
+# Build the list of allowed CORS origins.
+# CORS_ORIGINS env var accepts a comma-separated list of URLs.
+# Always include the Railway frontend domain and localhost for development.
+_default_origins = [
+    "https://helper-production-f608.up.railway.app",
+    "http://localhost:3000",
+    "http://localhost:8080",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:8080",
+]
+_extra = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
+_allowed_origins = list(dict.fromkeys(_default_origins + _extra))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
+    allow_origin_regex=r"https://.*\.up\.railway\.app",  # all Railway subdomains
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
