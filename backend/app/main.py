@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 
@@ -9,6 +10,8 @@ from . import models  # noqa: F401
 from .routers.assistant import router as assistant_router
 from .routers.meetings import router as meetings_router
 from .routers.telegram import router as telegram_router
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Helper API", version="0.1.0")
 app.add_middleware(
@@ -26,6 +29,27 @@ app.include_router(telegram_router, prefix="/telegram", tags=["telegram"])
 @app.on_event("startup")
 def on_startup() -> None:
     Base.metadata.create_all(bind=engine)
+    _start_telegram_bot()
+
+
+def _start_telegram_bot() -> None:
+    """Dispatch the Telegram bot polling task to a Celery worker.
+
+    The task is sent only when TELEGRAM_BOT_TOKEN is present so that
+    deployments without a bot token are unaffected.
+    """
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    if not token:
+        logger.info("TELEGRAM_BOT_TOKEN not set — skipping Telegram bot startup.")
+        return
+
+    try:
+        from bot import celery_app, run_telegram_bot  # noqa: PLC0415
+
+        run_telegram_bot.apply_async()
+        logger.info("Telegram bot polling task dispatched to Celery worker.")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not dispatch Telegram bot task: %s", exc)
 
 
 @app.get("/health")
