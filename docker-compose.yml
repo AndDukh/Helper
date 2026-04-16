@@ -7,6 +7,12 @@ services:
       REDIS_URL: redis://redis:6379/0
       DATABASE_URL: postgresql+psycopg://helper:helper@postgres:5432/helper
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      KIMI_API_KEY: ${KIMI_API_KEY:-}
+      KIMI_API_BASE_URL: ${KIMI_API_BASE_URL:-https://api.moonshot.ai/v1}
+      KIMI_MODEL: ${KIMI_MODEL:-moonshot-v1-8k}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-llama3.3:latest}
+      OLLAMA_TODO_MODEL: ${OLLAMA_TODO_MODEL:-phi3:mini}
       STT_PROVIDER: ${STT_PROVIDER:-openai_whisper_local}
       WHISPER_MODEL: ${WHISPER_MODEL:-small}
       OLLAMA_API_BASE: ${OLLAMA_API_BASE:-http://ollama:11434}

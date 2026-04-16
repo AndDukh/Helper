@@ -8,6 +8,7 @@ from .db import Base, engine
 from . import models  # noqa: F401
 from .routers.assistant import router as assistant_router
 from .routers.meetings import router as meetings_router
+from .routers.orchestrator import router as orchestrator_router
 from .routers.telegram import router as telegram_router
 
 app = FastAPI(title="Helper API", version="0.1.0")
@@ -35,6 +36,7 @@ app.add_middleware(
 )
 app.include_router(meetings_router, prefix="/meetings", tags=["meetings"])
 app.include_router(assistant_router, prefix="/assistant", tags=["assistant"])
+app.include_router(orchestrator_router, prefix="/ai", tags=["ai"])
 app.include_router(telegram_router, prefix="/telegram", tags=["telegram"])
 
 

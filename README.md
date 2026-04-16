@@ -86,6 +86,31 @@ Mini App в Telegram открывается **только по HTTPS** (обы�
    - Local Whisper health: `localhost:8000/health/stt`
    - Mini App: `localhost:3000`, Backend: `localhost:8000`
 
+## Multi-model orchestration (Ollama + Kimi)
+
+Backend endpoint:
+- `POST /ai/orchestrate`
+
+Routing policy:
+- `llama3.3` (Ollama) for user conversation and general planning tasks (`task_type="chat"`).
+- `phi3:mini` (Ollama) for TODO lists and notes (`task_type="todo"` or `task_type="note"`).
+- `Kimi API` for advanced analytics/presentations/data analysis (`task_type="analysis"`, `"presentation"`, `"data_analysis"` and high-priority deep analysis prompts).
+
+Environment variables:
+- `OLLAMA_BASE_URL` (default `http://localhost:11434`)
+- `OLLAMA_CHAT_MODEL` (default `llama3.3:latest`)
+- `OLLAMA_TODO_MODEL` (default `phi3:mini`)
+- `KIMI_API_KEY`
+- `KIMI_API_BASE_URL` (default `https://api.moonshot.ai/v1`)
+- `KIMI_MODEL` (default `moonshot-v1-8k`)
+
+Prepare Ollama models:
+- `ollama pull llama3.3:latest`
+- `ollama pull phi3:mini`
+
+Quick API example:
+- `curl -X POST http://localhost:8000/ai/orchestrate -H 'Content-Type: application/json' -d '{"task_type":"todo","prompt":"Сделай список задач по запуску релиза","priority":"normal"}'`
+
 ## Railway deployment (Telegram production)
 
 This repository is a monorepo, so deploy it as separate Railway services from the same GitHub repo:
@@ -125,6 +150,8 @@ Notes:
 - `backend` and `frontend` Dockerfiles support Railway dynamic `PORT`.
 - `frontend` runs in production mode (`next build` + `next start`).
 - In BotFather, set Menu Button URL to the same value as `WEBAPP_URL`.
+- For automatic updates, connect each Railway service to this GitHub repo and branch. After every `git push`, Railway will rebuild and redeploy that service automatically.
+- Helper script for auto-commit + push: `bash scripts/deploy-railway.sh`
 
 Kimi integration notes:
 

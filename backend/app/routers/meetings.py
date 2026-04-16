@@ -47,6 +47,33 @@ def _build_protocol_stub(meeting_id: UUID, title: str) -> ProtocolDraftResponse:
     )
 
 
+def _upsert_transcript(db: Session, meeting_id: UUID, transcript_text: str) -> None:
+    transcript_row = db.query(Transcript).filter(Transcript.meeting_id == meeting_id).first()
+    if transcript_row:
+        transcript_row.transcript_text = transcript_text
+        return
+
+    db.add(Transcript(meeting_id=meeting_id, transcript_text=transcript_text))
+
+
+def _upsert_protocol(db: Session, payload: ProtocolDraftResponse) -> None:
+    protocol_row = db.query(Protocol).filter(Protocol.meeting_id == payload.meeting_id).first()
+    if protocol_row:
+        protocol_row.summary = payload.summary
+        protocol_row.decisions = payload.decisions
+        protocol_row.action_items = payload.action_items
+        return
+
+    db.add(
+        Protocol(
+            meeting_id=payload.meeting_id,
+            summary=payload.summary,
+            decisions=payload.decisions,
+            action_items=payload.action_items,
+        )
+    )
+
+
 @router.get("", response_model=list[MeetingResponse])
 def list_meetings(db: Session = Depends(get_db)) -> list[MeetingResponse]:
     meetings = db.query(Meeting).order_by(Meeting.started_at.desc()).all()
@@ -128,19 +155,7 @@ def generate_protocol_stub(meeting_id: UUID, db: Session = Depends(get_db)) -> P
         raise HTTPException(status_code=404, detail="Meeting not found")
 
     protocol_payload = _build_protocol_stub(meeting_id=meeting_id, title=meeting.title)
-    protocol_row = db.query(Protocol).filter(Protocol.meeting_id == meeting_id).first()
-    if protocol_row:
-        protocol_row.summary = protocol_payload.summary
-        protocol_row.decisions = protocol_payload.decisions
-        protocol_row.action_items = protocol_payload.action_items
-    else:
-        protocol_row = Protocol(
-            meeting_id=meeting_id,
-            summary=protocol_payload.summary,
-            decisions=protocol_payload.decisions,
-            action_items=protocol_payload.action_items,
-        )
-        db.add(protocol_row)
+    _upsert_protocol(db, protocol_payload)
     db.commit()
     return protocol_payload
 
@@ -172,12 +187,7 @@ async def transcribe_meeting_audio(
             status_code=502,
             detail=f"Speech service unreachable or error: {exc!s}",
         ) from exc
-    transcript_row = db.query(Transcript).filter(Transcript.meeting_id == meeting_id).first()
-    if transcript_row:
-        transcript_row.transcript_text = transcript
-    else:
-        transcript_row = Transcript(meeting_id=meeting_id, transcript_text=transcript)
-        db.add(transcript_row)
+    _upsert_transcript(db, meeting_id, transcript)
     db.commit()
     return TranscriptResponse(meeting_id=meeting_id, transcript_text=transcript)
 
@@ -204,27 +214,10 @@ def start_demo_flow(meeting_id: UUID, db: Session = Depends(get_db)) -> DemoFlow
             "Configured for prototype flow without uploading real audio."
         ),
     )
-    transcript_row = db.query(Transcript).filter(Transcript.meeting_id == meeting_id).first()
-    if transcript_row:
-        transcript_row.transcript_text = transcript.transcript_text
-    else:
-        transcript_row = Transcript(meeting_id=meeting_id, transcript_text=transcript.transcript_text)
-        db.add(transcript_row)
+    _upsert_transcript(db, meeting_id, transcript.transcript_text)
 
     protocol = _build_protocol_stub(meeting_id=meeting_id, title=meeting.title)
-    protocol_row = db.query(Protocol).filter(Protocol.meeting_id == meeting_id).first()
-    if protocol_row:
-        protocol_row.summary = protocol.summary
-        protocol_row.decisions = protocol.decisions
-        protocol_row.action_items = protocol.action_items
-    else:
-        protocol_row = Protocol(
-            meeting_id=meeting_id,
-            summary=protocol.summary,
-            decisions=protocol.decisions,
-            action_items=protocol.action_items,
-        )
-        db.add(protocol_row)
+    _upsert_protocol(db, protocol)
     db.commit()
 
     meeting_response = _to_meeting_response(meeting)

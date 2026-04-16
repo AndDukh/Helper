@@ -1,8 +1,8 @@
 from datetime import datetime
-from typing import Literal
+from typing import Dict, Literal, Optional, Union
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class MeetingStartRequest(BaseModel):
@@ -18,7 +18,7 @@ class MeetingResponse(BaseModel):
     title: str
     status: Literal["recording", "stopped"]
     started_at: datetime
-    stopped_at: datetime | None = None
+    stopped_at: Optional[datetime] = None
 
 
 class ProtocolDraftResponse(BaseModel):
@@ -35,8 +35,8 @@ class TranscriptResponse(BaseModel):
 
 class AssistantExecuteRequest(BaseModel):
     task: str = Field(min_length=3, max_length=1000)
-    context: str | None = None
-    provider: str | None = None
+    context: Optional[str] = None
+    provider: Optional[str] = None
 
 
 class AssistantExecuteResponse(BaseModel):
@@ -59,7 +59,7 @@ class IntegrationConnectRequest(BaseModel):
 class IntegrationConnectResponse(BaseModel):
     service: str
     status: str
-    auth_url: str | None = None
+    auth_url: Optional[str] = None
     note: str
 
 
@@ -73,19 +73,19 @@ class IntegrationUploadRequest(BaseModel):
     filename: str = Field(min_length=1, max_length=255)
     mime_type: str = Field(min_length=3, max_length=128)
     content_base64: str = Field(min_length=8)
-    folder: str | None = None
+    folder: Optional[str] = None
 
 
 class IntegrationUploadResponse(BaseModel):
     service: str
     status: str
-    location: str | None = None
+    location: Optional[str] = None
     note: str
 
 
 class AIProviderConnectRequest(BaseModel):
     provider: str = Field(min_length=2, max_length=64)
-    api_key: str | None = None
+    api_key: Optional[str] = None
 
 
 class AIProviderConnectResponse(BaseModel):
@@ -112,3 +112,27 @@ class AutoProtocolResponse(BaseModel):
     meeting_id: UUID
     transcript: TranscriptResponse
     protocol: ProtocolDraftResponse
+
+
+class OrchestrateRequest(BaseModel):
+    task_type: Literal["chat", "todo", "note", "analysis", "plan", "extract", "report", "presentation", "data_analysis"] = "chat"
+    prompt: str = Field(min_length=3, max_length=12000)
+    context: Optional[Dict] = None
+    priority: Literal["low", "normal", "high"] = "normal"
+    force_provider: Optional[Literal["ollama", "kimi"]] = None
+
+
+class OrchestrateArtifact(BaseModel):
+    type: str
+    content: Union[str, Dict]
+
+
+class OrchestrateResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
+    provider_used: str
+    model_used: Optional[str] = None
+    trace_id: str
+    route_reason: str
+    result: dict
+    artifacts: list[OrchestrateArtifact]

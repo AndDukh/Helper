@@ -1,12 +1,17 @@
+from __future__ import annotations
+
 from datetime import datetime, timezone
+from typing import Optional
 from uuid import uuid4
 from uuid import UUID as PyUUID
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base
+
+json_type = JSONB().with_variant(JSON(), "sqlite")
 
 
 class Meeting(Base):
@@ -16,7 +21,7 @@ class Meeting(Base):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="recording")
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    stopped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    stopped_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Transcript(Base):
@@ -40,8 +45,8 @@ class Protocol(Base):
         UUID(as_uuid=True), ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, unique=True
     )
     summary: Mapped[str] = mapped_column(Text, nullable=False)
-    decisions: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
-    action_items: Mapped[list[dict[str, str]]] = mapped_column(JSONB, nullable=False)
+    decisions: Mapped[list[str]] = mapped_column(json_type, nullable=False)
+    action_items: Mapped[list[dict[str, str]]] = mapped_column(json_type, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(tz=timezone.utc)
     )

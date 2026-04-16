@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import json
 import os
+from typing import Dict, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -15,7 +18,7 @@ class TelegramVerifyRequest(BaseModel):
 
 class TelegramVerifyResponse(BaseModel):
     ok: bool
-    user: dict | None = None
+    user: Optional[Dict] = None
 
 
 @router.post("/verify-init", response_model=TelegramVerifyResponse)
@@ -30,7 +33,7 @@ def verify_init(payload: TelegramVerifyRequest) -> TelegramVerifyResponse:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 
     user_raw = data.get("user")
-    user: dict | None = None
+    user: Optional[Dict] = None
     if user_raw:
         try:
             user = json.loads(user_raw)
